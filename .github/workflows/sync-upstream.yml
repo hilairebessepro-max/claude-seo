@@ -1,0 +1,42 @@
+name: Sync upstream
+
+# Garde ce fork aligne sur AgriciDaniel/claude-seo.
+# On fusionne (au lieu d'un fast-forward) pour ne pas perdre ce workflow,
+# qui est le seul commit propre a ce fork.
+
+on:
+  schedule:
+    - cron: '17 4 * * *'   # tous les jours a 04h17 UTC
+  workflow_dispatch:        # bouton "Run workflow" dans l'onglet Actions
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fusionner l'upstream
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/AgriciDaniel/claude-seo.git
+          git fetch upstream main
+
+          if git merge-base --is-ancestor upstream/main HEAD; then
+            echo "Deja a jour avec upstream/main."
+            exit 0
+          fi
+
+          git merge --no-edit upstream/main
+          git push origin HEAD:main
+          echo "Fork synchronise sur $(git rev-parse --short upstream/main)."
