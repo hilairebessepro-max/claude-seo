@@ -3,6 +3,12 @@ name: Sync upstream
 # Garde ce fork aligne sur AgriciDaniel/claude-seo.
 # On fusionne (au lieu d'un fast-forward) pour ne pas perdre ce workflow,
 # qui est le seul commit propre a ce fork.
+#
+# Le dossier .github/workflows/ appartient au fork : on le gele a chaque merge.
+# Sinon le push est refuse ("refusing to allow a GitHub App to create or update
+# workflow ... without `workflows` permission"), le GITHUB_TOKEN n'ayant pas le
+# droit d'ecrire des fichiers de workflow. Les CI heritees de l'upstream sont
+# desactivees sur ce fork de toute facon.
 
 on:
   schedule:
@@ -37,6 +43,28 @@ jobs:
             exit 0
           fi
 
-          git merge --no-edit upstream/main
+          merge_ok=1
+          git merge --no-ff --no-edit upstream/main || merge_ok=0
+
+          if [ "$merge_ok" -eq 0 ]; then
+            hors_workflows="$(git diff --name-only --diff-filter=U | grep -v '^\.github/workflows/' || true)"
+            if [ -n "$hors_workflows" ]; then
+              echo "::error::Conflit hors .github/workflows, resolution manuelle requise :"
+              echo "$hors_workflows"
+              exit 1
+            fi
+          fi
+
+          # On rejoue les workflows du fork par-dessus ceux de l'upstream.
+          git rm -rqf --ignore-unmatch .github/workflows
+          git checkout ORIG_HEAD -- .github/workflows
+          git add -A .github/workflows
+
+          if [ "$merge_ok" -eq 0 ]; then
+            git commit --no-edit
+          else
+            git commit --amend --no-edit
+          fi
+
           git push origin HEAD:main
           echo "Fork synchronise sur $(git rev-parse --short upstream/main)."
